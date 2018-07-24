@@ -202,48 +202,7 @@ describe("style changer macros", function() {
 			});
 			// TODO: Add .css() tests of output.
 
-			if (name === "transition") {
-				it("changes the transition of (link:)", function(done) {
-					var p = runPassage("("+name+":'pulse')+(link:'grault')[garply]");
-					p.find('tw-link').click();
-					setTimeout(function() {
-						expect(p.find('[data-t8n="pulse"]').length).toBe(1);
-						done();
-					});
-				});
-				it("with (link:), doesn't transition the link in immediately", function() {
-					var p = runPassage("("+name+":'pulse')+(link:'grault')[garply]");
-					expect(p.find('[data-t8n="pulse"]').length).toBe(0);
-				});
-				it("changes the transition of (show:)", function() {
-					var p = runPassage("|foo)[bar](t8n-time:12s)+("+name+":'pulse')(show:?foo)");
-					expect(p.find('[data-t8n="pulse"]').length).toBe(1);
-				});
-				it("changes the passage transitions of (link-show:)", function(done) {
-					var p = runPassage("[bar](foo|("+name+":'pulse')(link-show:'grault',?foo)");
-					p.find('tw-link').click();
-					setTimeout(function() {
-						expect($('tw-story tw-transition-container[data-t8n="pulse"]').length).toBe(1);
-						done();
-					});
-				});
-				['click','click-replace','click-append','click-prepend',
-				'mouseover','mouseover-replace','mouseover-append','mouseover-prepend'].forEach(function(name2) {
-					var interaction = (name2.startsWith('mouseover')) ? "mouseenter" : "click";
-					it("changes the transition of (" + name2 + ":)", function(done) {
-						var p = runPassage("foo("+name+":'pulse')+("+name2+":'foo')[bar]");
-						p.find('tw-link, .enchantment-link, .enchantment-mouseover')[interaction]();
-						setTimeout(function() {
-							expect(p.find('[data-t8n="pulse"]').length).toBe(1);
-							done();
-						});
-					});
-					it("with (" + name2 + ":), doesn't transition the link in immediately", function() {
-						var p = runPassage("foo("+name+":'pulse')("+name2+":'foo','grault')");
-						expect(p.find('[data-t8n="pulse"]').length).toBe(0);
-					});
-				});
-			} else {
+			if (name !== "transition") {
 				it("changes the passage transitions of (goto:)", function(done) {
 					createPassage("foo","grault");
 					var p = runPassage("("+name+":'pulse')(goto:'grault')");
@@ -266,7 +225,7 @@ describe("style changer macros", function() {
 					it("changes the passage transitions of (" + name2 + ":)", function(done) {
 						runPassage("foo","grault");
 						var p = runPassage("foo("+name+":'pulse')("+name2+":"+arg+")");
-						p.find('tw-link, .enchantment-link, .enchantment-mouseover')[interaction]();
+						p.find('tw-link, .enchantment-link')[interaction]();
 						setTimeout(function() {
 							expect($('tw-story tw-transition-container[data-t8n="pulse"]').length).toBe(1);
 							done();
@@ -317,7 +276,7 @@ describe("style changer macros", function() {
 							it("on (" + name2 + ":)", function(done) {
 								runPassage("foo","grault");
 								var p = runPassage("foo(t8n-depart:'dissolve')+(t8n-arrive:'pulse')("+name2+":"+arg+")");
-								p.find('tw-link, .enchantment-link, .enchantment-mouseover')[interaction]();
+								p.find('tw-link, .enchantment-link')[interaction]();
 								setTimeout(function() {
 									expect($('tw-story tw-transition-container.transition-out[data-t8n="dissolve"]').length).toBe(1);
 									expect($('tw-story tw-transition-container.transition-in[data-t8n="pulse"]').length).toBe(1);
@@ -362,7 +321,7 @@ describe("style changer macros", function() {
 		it("is aliased to (t8n-time:)", function() {
 			expect("(print: (t8n-time:2s) is (transition-time:2s))").markupToPrint("true");
 		});
-		// TODO: Add .css() tests of output, including passage links.
+		// TODO: Add .css() tests of output.
 	});
 	describe("the (text-rotate:) macro", function() {
 		it("requires exactly 1 number argument", function() {

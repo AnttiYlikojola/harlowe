@@ -28,13 +28,13 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 		//                            (Disabled code won't be used until something enables it).
 		enabled:          true,
 		
-		// {jQuery|HookSet} target    Where to render the source, if not the hookElement.
+		// {jQuery|HookSet}           Where to render the source, if not the hookElement.
 		target:           null,
 		
 		// {String} append            Which jQuery method name to append the source to the dest with.
 		append:           "append",
 
-		// {[newTarget]} [newTargets] Alternative targets (which are {target,append} objects) to use instead of the original.
+		// {[newTarget]} newTargets   Alternative targets (which are {target,append} objects) to use instead of the original.
 		newTargets:       null,
 		
 		// {String} [transition]      Which built-in transition to use.
@@ -43,16 +43,11 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 		// {Number|Null} [transitionTime]  The duration of the transition, in ms, or null if the default speed should be used.
 		transitionTime:   null,
 
-		// {Boolean} [transitionDeferred]  Whether or not the transition given above should not be used, but saved for an interaction element
-		//                                 that reuses this ChangeDescriptor, such as a (link:). This replaces the transition with "instant"
-		//                                 but leaves the "transition" value untouched.
-		transitionDeferred: false,
-
-		// {Object} [loopVars]        An object of {temp variable : values array} pairs, which the source should loop over.
+		// {Object} loopVars          An object of {temp variable : values array} pairs, which the source should loop over.
 		//                            Used only by (for:)
 		loopVars:         null,
 		
-		// {Array} [styles]           A set of CSS styles to apply inline to the hook's element.
+		// {Array} styles             A set of CSS styles to apply inline to the hook's element.
 		styles:           null,
 		
 		// {Array} [attr]             Array of objects of attributes to apply to the <tw-expression> using $.fn.attr().
@@ -191,9 +186,9 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 		*/
 		render() {
 			const
-				{source, transition, transitionTime, transitionDeferred, enabled, data, section, newTargets} = this;
+				{source, transition, transitionTime, enabled, data, section, newTargets} = this;
 			let
-				{target, target:oldTarget, append} = this;
+				{target, append} = this;
 			
 			assertOnlyHas(this, changeDescriptorShape);
 
@@ -238,25 +233,7 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 				so that consumers like Section.renderInto() can modify all of their <tw-expressions>, etc.
 			*/
 			let dom = $();
-			const renderAll = (append, before) => target => {
-				/*
-					"before" should only be true if this newTarget was created by (replace:), (append:) or (prepend:).
-					These macros are scoped to only target hooks and text that has already rendered - earlier in the
-					passage or section to this changed hook (i.e. the element in oldTarget).
-				*/
-				if (before
-						/*
-							Of course, we should only prevent targeting elements that *haven't rendered yet*.
-							There isn't a very idiomatic way of determining this, but assuming that it's
-							A: detached from the DOM,
-						*/
-						&& target[0].compareDocumentPosition(document) & 1
-						/*
-							and B: later in the node tree, seems a safe enough assumption.
-						*/
-						&& target[0].compareDocumentPosition(oldTarget[0]) & 2) {
-					return;
-				}
+			const renderAll = append => target => {
 				/*
 					Generate a new descriptor which has the same properties
 					(rather, delegates to the old one via the prototype chain)
@@ -265,10 +242,10 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 				*/
 				dom = dom.add(this.create({ target, append, newTargets:null }).render());
 			};
-			[].concat(target).forEach(function loop(target, _, __, append_ = append, before) {
+			[].concat(target).forEach(function loop(target, _, __, append_ = append) {
 				// Is it a HookSet,
 				if (HookSet.isPrototypeOf(target)) {
-					target.forEach(section, renderAll(append_, before));
+					target.forEach(section, renderAll(append_));
 				}
 				// a jQuery of <tw-hook> or <tw-expression> elements,
 				else if (target.jquery && target.length > 1) {
@@ -279,9 +256,9 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 					/*
 						the newTarget's "target" property may be a HookSet or jQuery.
 						To handle this, we unwrap the newTarget object and pass its "append"
-						and optional "before" value to a recursive call to "loop"
+						value to a recursive call to "loop"
 					*/
-					loop(target.target, _, __, target.append, target.before);
+					loop(target.target, _, __, target.append);
 				}
 			});
 			/*
@@ -372,9 +349,9 @@ define(['jquery', 'utils', 'renderer', 'datatypes/hookset'], ($, {assertOnlyHas,
 			this.update();
 			
 			/*
-				Transition it using this descriptor's given transition, if it wasn't deferred.
+				Transition it using this descriptor's given transition.
 			*/
-			if (transition && !transitionDeferred) {
+			if (transition) {
 				transitionIn(
 					/*
 						There's a slight problem: when we want to replace the

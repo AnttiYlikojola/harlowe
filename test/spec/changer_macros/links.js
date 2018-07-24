@@ -37,12 +37,6 @@ describe("link macros", function() {
 			p.find('tw-link').click();
 			expect(p.text()).toBe("Hello");
 		});
-		it("can't be clicked if its text contains an error", function() {
-			var p = runPassage("(link-replace:'(print:2+true)')[B]");
-			expect(p.find('tw-link tw-error').length).toBe(1);
-			p.find('tw-link').click();
-			expect(p.text()).not.toBe("B");
-		});
 	});
 	describe("(link-reveal:)", function() {
 		it("accepts exactly 1 non-empty string", function() {
@@ -92,8 +86,8 @@ describe("link macros", function() {
 			var p = runPassage("(link-repeat:'A')[B(set:$c to 12)]");
 			p.find('tw-link').click();
 			expect(p.text()).toBe("AB");
-			expect(p.find('tw-link').length).toBe(1);
 			expect("$c").markupToPrint("12");
+			expect(p.find('tw-link').length).toBe(1);
 		});
 		it("the link can be clicked multiple times", function() {
 			var p = runPassage("(set:$c to 0)(link-repeat:'A')[B(set:$c to it + 12)]");
@@ -104,7 +98,7 @@ describe("link macros", function() {
 		});
 	});
 	/*
-		Though (link-goto:), (link-undo:) and (link-show:) are not changers, they are similar enough to the above in terms of API.
+		Though (link-goto:) and (link-undo:) are not changers, they are similar enough to the above in terms of API.
 	*/
 	['link-goto', 'link-reveal-goto'].forEach(function(name) {
 		var hook = name === "link-reveal-goto" ? "[]" : "";
@@ -138,12 +132,6 @@ describe("link macros", function() {
 				expect(link.tag()).toBe("tw-broken-link");
 				expect(link.html()).toBe("mire");
 			});
-			it("still becomes a <tw-broken-link> if its text contains an error", function() {
-				var link = runPassage("(" + name + ":'(print:2+true)','mire')"+hook).find('tw-broken-link');
-				
-				expect(link.parent().is(hook ? 'tw-hook' : 'tw-expression')).toBe(true);
-				expect(link.tag()).toBe("tw-broken-link");
-			});
 			it("renders markup in the link text, and ignores it for discerning the passage name", function() {
 				createPassage("","mire");
 				var p = runPassage("("+name+":'//glower//','//mire//')"+hook);
@@ -155,21 +143,9 @@ describe("link macros", function() {
 			if (hook) {
 				it("runs the hook when clicked, before going to the passage", function() {
 					createPassage("<p>$foo</p>","mire");
-					var link = runPassage("(set:$foo to 'grault')("+name+":'mire')[(set:$foo to 'garply')]").find('tw-link');
-					expect(link.length).toBe(1);
+					var link = runPassage("("+name+":'mire')[(set:$foo to 'garply')]").find('tw-link');
 					link.click();
 					expect($('tw-passage p').text()).toBe("garply");
-				});
-				// This probably also tests for contained (load-game:) interaction...
-				it("contained (goto:)s go to that passage instead of the intended passage", function(done) {
-					createPassage("<p>$foo</p>(set:$foo to 'baz')","mire");
-					createPassage("<p>$foo</p>","mere");
-					var link = runPassage("(set:$foo to 'bar')("+name+":'mire')[(goto:'mere')]").find('tw-link');
-					link.click();
-					setTimeout(function() {
-						expect($('tw-passage p').text()).toBe("bar");
-						done();
-					});
 				});
 			}
 			else {
@@ -198,13 +174,6 @@ describe("link macros", function() {
 				var link = runPassage("("+name+":'mire')"+hook).find('tw-link');
 				link.trigger($.Event('keydown', { which: 13 }));
 				expect($('tw-passage p').text()).toBe("garply");
-			});
-			it("can't be clicked if its text contains an error", function() {
-				createPassage("<p>garply</p>","mire");
-				var p = runPassage("(" + name + ":'(print:2+true)','mire')"+hook);
-				expect(p.find('tw-link tw-error').length).toBe(1);
-				p.find('tw-link').click();
-				expect(p.text()).not.toBe("garply");
 			});
 		});
 	});
@@ -261,48 +230,6 @@ describe("link macros", function() {
 			var link = runPassage("(link-undo:'mire')","corge").find('tw-link');
 			link.trigger($.Event('keydown', { which: 13 }));
 			expect($('tw-passage p').text()).toBe("garply");
-		});
-	});
-	describe("(link-show:)", function() {
-		it("accepts 1 non-empty string and 1 or more hooknames", function() {
-			expect("(link-show:)").markupToError();
-			expect("(link-show:2)").markupToError();
-			expect("(link-show:'')").markupToError();
-			expect("(link-show:'s')").markupToError();
-			expect("(link-show:true)").markupToError();
-			
-			expect("(link-show:'s',?foo)").not.markupToError();
-			expect("(link-show:'s',?foo, ?bar, ?baz, ?qux)").not.markupToError();
-			expect("(link-show:'s',?foo, 's')").markupToError();
-		});
-		it("when clicked, becomes plain text and reveals hidden named hooks", function() {
-			var p = runPassage('|3)[Red](link-show:"A",?3)');
-			expect(p.text()).toBe('A');
-			p.find('tw-link').click();
-			expect(p.text()).toBe('RedA');
-			expect(p.find('tw-link').length).toBe(0);
-		});
-		[
-			['(hidden:)', '(hidden:)'],
-			['(if:)',     '(if:false)'],
-			['(unless:)', '(unless:true)'],
-			['(else-if:)','(if:true)[](else-if:true)'],
-			['(else:)',   '(if:true)[](else:)'],
-			['booleans',  '(set:$x to false)$x'],
-		].forEach(function(arr) {
-			var name = arr[0], code = arr[1];
-			it("when clicked, reveals hooks hidden with " + name, function() {
-				expect(code + '|3>[Red](show:?3)').markupToPrint('Red');
-				var p = runPassage(code + '|3>[Red](link-show:"A",?3)');
-				expect(p.text()).toBe('A');
-				p.find('tw-link').click();
-				expect(p.text()).toBe('RedA');
-			});
-		});
-		it("when clicked, reveals specific same-named hooks", function() {
-			var p = runPassage('|3)[Red]|3)[Blue]|3)[Green](link-show:"A",?3\'s last, ?3\'s 1st)');
-			p.find('tw-link').click();
-			expect(p.text()).toBe('RedGreenA');
 		});
 	});
 });

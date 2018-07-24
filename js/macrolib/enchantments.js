@@ -78,8 +78,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 			enchantment.enchantScope();
 			return "";
 		},
-		[either(HookSet,String), ChangerCommand],
-		false // Can't have attachments.
+		[either(HookSet,String), ChangerCommand]
 	);
 
 	/*
@@ -120,8 +119,8 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 
 				Details:
 				(replace:) lets you specify a target, and a block of text to replace the target with. The attached hook
-				(which specifies the replacement text) will not be rendered normally - thus, you can essentially put
-				(replace:) commands anywhere in the passage text without interfering much with the passage's visible text.
+				will not be rendered normally - thus, you can essentially place (replace:) commands anywhere in the passage
+				text without interfering much with the passage's visible text.
 
 				If the given target is a string, then every instance of the string in the current passage is replaced
 				with a copy of the hook's contents. If the given target is a hook reference, then only named hooks
@@ -129,17 +128,8 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 				you want only specific places in the passage text to change.
 
 				If the target doesn't match any part of the passage, nothing will happen. This is to allow you to
-				place (replace:) commands in `footer` tagged passages, if you want them to conditionally affect
+				place (replace:) commands in `header` tagged passages, if you want them to conditionally affect
 				certain named hooks throughout the entire game, without them interfering with other passages.
-
-				(replace:) (and its variations) cannot affects hooks or text that haven't been printed yet - if the (replace:)
-				runs at the same time that the passage is appearing (as in, it isn't inside a hook that's delayed (live:), (link:), (show:)
-				or similar macros), and a hook or line of text appears after it in the passage, the macro won't replace its contents
-				even if it's a valid target. For example: `(replace: "cool")[hot] cool water` won't work because the (replace:) runs immediately,
-				but `cool water (replace: "cool")[hot]` and `(event: when time > 5)[(replace: "cool")[hot]] cool water` will.
-
-				As a result of the above, putting these in `header` tagged passages instead of `footer` tagged passages won't
-				do much good, as they are printed before the rest of the passage.
 
 				See also:
 				(append:), (prepend:), (show:)
@@ -228,13 +218,11 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 							({target:target2, append}) => is(target1, target2) && e === append
 						))
 						/*
-							Create a newTarget object, which is a {target, append, [before]} object that pairs the revision
+							Create a newTarget object, which is a {target, append} object that pairs the revision
 							method with the target. This allows "(append: ?a) + (prepend:?b)" to work on the same
 							ChangeDescriptor.
-							"before" is needed to ensure that these are consistently scoped to only affect targets
-							before it in the passage.
 						*/
-						.map(target => ({target, append:e, before:true}))
+						.map(target => ({target, append:e}))
 				);
 				return desc;
 			},
@@ -345,11 +333,6 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 					This is unset when the event is finally triggered.
 				*/
 				desc.enabled = false;
-				/*
-					As with links, any transitions on (click:), (mouseover:) or (mouseout:) are applied only to
-					the hook when it eventually appears, not the interaction element.
-				*/
-				desc.transitionDeferred = true;
 				
 				/*
 					If a rerender method was specified, then this is a "combo" macro,
@@ -432,14 +415,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 							desc.section.renderInto(
 								desc.source,
 								null,
-								Object.assign({}, desc, {
-									enabled: true,
-									/*
-										Turn transitions back on, so that the target
-										can use them (given that the interaction element did not).
-									*/
-									transitionDeferred: false,
-								})
+								Object.assign({}, desc, { enabled: true })
 							);
 						},
 					},
@@ -580,7 +556,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 			See also:
 			(link:), (link-reveal:), (link-repeat:), (click:), (mouseout:), (replace:), (mouseover-replace:), (hover-style:)
 
-			#links 12
+			#links 11
 		*/
 		{
 			name: "mouseover",
@@ -618,7 +594,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 			See also:
 			(link:), (link-reveal:), (link-repeat:), (click:), (mouseover:), (replace:), (mouseout-replace:), (hover-style:)
 
-			#links 17
+			#links 15
 		*/
 		{
 			name: "mouseout",
@@ -697,7 +673,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-replace:), but uses the (mouseover:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-replace:).
 
-		#links 13
+		#links 12
 	*/
 	/*d:
 		(mouseover-append: HookName or String) -> Changer
@@ -705,7 +681,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-append:), but uses the (mouseover:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-append:).
 
-		#links 14
+		#links 13
 	*/
 	/*d:
 		(mouseover-prepend: HookName or String) -> Changer
@@ -713,7 +689,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-prepend:), but uses the (mouseover:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-prepend:).
 
-		#links 15
+		#links 14
 	*/
 	/*d:
 		(mouseout-replace: HookName or String) -> Changer
@@ -721,7 +697,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-replace:), but uses the (mouseout:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-replace:).
 
-		#links 18
+		#links 16
 	*/
 	/*d:
 		(mouseout-append: HookName or String) -> Changer
@@ -729,7 +705,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-append:), but uses the (mouseout:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-append:).
 
-		#links 19
+		#links 17
 	*/
 	/*d:
 		(mouseout-prepend: HookName or String) -> Changer
@@ -737,7 +713,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		This is similar to (click-prepend:), but uses the (mouseout:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-prepend:).
 		
-		#links 20
+		#links 18
 	*/
 	revisionTypes.forEach((revisionType) => {
 		interactionTypes.forEach((interactionType) => {
@@ -749,7 +725,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		});
 	});
 	/*d:
-		(click-goto: HookName or String, String) -> Command
+		(click-goto: HookName or String, String) -> HookCommand
 
 		A special shorthand combination of the (click:) and (go-to:) macros, this allows you to make a hook
 		or bit of text into a passage link. `(click-goto: ?1, 'Passage Name')` is equivalent to `(click: ?1)[(goto:'Passage Name')]`
@@ -763,18 +739,18 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 		See also:
 		(link-goto:)
 
-		#links 11
+		#links 19
 	*/
 	/*d:
-		(mouseover-goto: HookName or String, String) -> Command
+		(mouseover-goto: HookName or String, String) -> HookCommand
 
 		This is similar to (click-goto:), but uses the (mouseover:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-goto:).
 
-		#links 16
+		#links 20
 	*/
 	/*d:
-		(mouseout-goto: HookName or String, String) -> Command
+		(mouseout-goto: HookName or String, String) -> HookCommand
 
 		This is similar to (click-goto:), but uses the (mouseout:) macro's behaviour instead of
 		(click:)'s. For more information, consult the description of (click-goto:).
@@ -783,7 +759,7 @@ define(['jquery', 'utils', 'utils/selectors', 'utils/operationutils', 'engine', 
 	*/
 	interactionTypes.forEach((interactionType) => {
 		const name = interactionType.name + "-goto";
-		Macros.addCommand(name,
+		Macros.addHookCommand(name,
 			(selector, passage) => {
 				/*
 					If either of the arguments are the empty string, show an error.

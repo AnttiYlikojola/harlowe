@@ -1,6 +1,6 @@
 "use strict";
-define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'engine', 'internaltypes/twineerror', 'datatypes/hookset', 'datatypes/varbind', 'utils/operationutils'],
-($, requestAnimationFrame, Macros, {storyElement, toJSLiteral, unescape}, Selectors, State, Passages, Engine, TwineError, HookSet, VarBind, {printBuiltinValue}) => {
+define(['requestAnimationFrame', 'macros', 'utils', 'state', 'passages', 'engine', 'internaltypes/twineerror', 'datatypes/hookset', 'utils/operationutils'],
+(requestAnimationFrame, Macros, {toJSLiteral, unescape}, State, Passages, Engine, TwineError, HookSet, {printBuiltinValue}) => {
 	
 	/*d:
 		Command data
@@ -8,18 +8,25 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		Commands are special kinds of data which perform an effect when they're placed in the passage.
 		Most commands are created from macros placed directly in the passage, but, like all forms of
 		data, they can be saved into variables using (set:) and (put:), and stored for later use.
-
+		
 		Macros that produce commands include (alert:), (save-game:), (load-game:), and more.
+	*/
+	/*d:
+		HookCommand data
 
-		Commands like (display:), (print:), (link:), (show:) and so on are used to print data or an interactive
-		element into the passage. These elements can be styled like hooks, by attaching changers to the macro,
-		as if it was a hook.
+		Certain macros like (display:), (print:), (link:) and so on are used to print data or an interactive
+		element into the passage. These elements can be styled like hooks, by attaching changers to the macro.
+		So, they are "hook-like" commands.
 
 		In addition to their visual appearance, you can also change what passage transitions links use,
 		by applying (t8n-depart:) and (t8n-arrive:). (Note that since normal passage links are identical to the
-		(link-goto:) macro, you can also attach changers to passage links.)
+		(link-goto:) macro, you can also attach changers to passage links.) This is also why (go-to:) and
+		(undo:) are HookCommands, even though they have no visual form.
+
+		Note that HookCommands only have similarities to anonymous hooks: they can't be referred to by (click:) or
+		(replace:) to change them after the fact (unless the (hook:) macro is used to give them a name).
 	*/
-	const {Any, rest, either, optional} = Macros.TypeSignature;
+	const {Any, rest, optional} = Macros.TypeSignature;
 	const {assign} = Object;
 	
 	const hasStorage = !!localStorage
@@ -45,9 +52,9 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		return "(" + text + " " + Engine.options.ifid + ") ";
 	}
 	
-	Macros.addCommand
+	Macros.addHookCommand
 		/*d:
-			(display: String) -> Command
+			(display: String) -> HookCommand
 			
 			This command writes out the contents of the passage with the given string name.
 			If a passage of that name does not exist, this produces an error.
@@ -94,7 +101,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			[String])
 		
 		/*d:
-			(print: Any) -> Command
+			(print: Any) -> HookCommand
 			This command prints out any single argument provided to it, as text.
 			
 			Example usage:
@@ -135,7 +142,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			[Any])
 
 		/*d:
-			(go-to: String) -> Command
+			(go-to: String) -> HookCommand
 			This command stops passage code and sends the player to a new passage.
 			If the passage named by the string does not exist, this produces an error.
 			
@@ -157,7 +164,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			
 			Details:
 
-			You can attach changers like (t8n-depart:) and (t8n-arrive:) to this to
+			As this is a HookCommand, you can attach changers like (t8n-depart:) and (t8n-arrive:) to
 			alter the transition animation used when (go-to:) activates. Other kinds of changers
 			won't do anything, though.
 
@@ -214,7 +221,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			[String])
 
 		/*d:
-			(undo:) -> Command
+			(undo:) -> HookCommand
 			This command stops passage code and "undoes" the current turn, sending the player to the previous visited
 			passage and forgetting any variable changes that occurred in this passage.
 
@@ -232,7 +239,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			a header tagged passage.
 
 			Details:
-			You can attach changers like (t8n-depart:) and (t8n-arrive:) to this to
+			As this is a HookCommand, you can attach changers like (t8n-depart:) and (t8n-arrive:) to
 			alter the transition animation used when (undo:) activates. Other kinds of changers
 			won't do anything, though.
 			
@@ -268,20 +275,18 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			[])
 
 		/*d:
-			(cycling-link: [Bind], ...String) -> Command
+			(cycling-link: Bind, ...String) -> Command
 
 			A command that, when evaluated, creates a cycling link - a link which does not go anywhere, but changes its own text
-			to the next in a looping sequence of strings, and sets the optional bound variable to match the string value of the text.
+			to the next in a looping sequence of strings, and sets the bound variable to match the string value of the text.
 
 			Example usage:
-			* `(cycling-link: bind $head's hair, "Black", "Brown", "Blonde", "Red", "White")` binds the "hair" value in the $head datamap to the
-			current link text.
-			* `(cycling-link: "Mew", "Miao", "Mrr", "Mlem")` has no bound variable.
+			`(cycling-link: bind $head's hair, "Black", "Brown", "Blonde", "Red", "White")`
 
 			Rationale:
-			The cycling link is an interaction idiom popularised in Twine 1 which combines the utility of a dial input element with
-			the discovery and visual consistency of a link: the player can typically only discover that this is a cycling link by clicking it,
-			and can then discover the full set of labels by clicking through them. This affords a number of subtle dramatic and humourous
+			The cycling link was an interaction idiom popularised in Twine 1 which combined the utility of a dial input element with
+			the discovery and visual consistency of a link: the player can only discover that this is a cycling link by clicking it,
+			and can then only discover the full set of labels by clicking through them. This affords a number of subtle dramatic and humourous
 			possibilities, and moreover allows the link to sit comfortably among passage prose without standing out as an interface element.
 
 			The addition of a variable bound to the link, changing to match whichever text the player finally dialed the link to, allows
@@ -289,161 +294,19 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			other, even though no hooks and (set:)s can be attached to them.
 
 			Details:
-			If one of the strings is empty, such as `(cycling-link: "Two eggs", "One egg", "")`, then upon reaching the empty string, the link
-			will disappear permanently. If the *first* string is empty, an error will be produced (because then the link can never appear at all).
-
-			If attempting to render one string produces an error, such as `(cycling-link: "Goose", "(print: 2 + 'foo')")`, then the error will only appear
-			once the link cycles to that string.
-
-			The bound variable will be set to the first value as soon as the cycling link is displayed - so, even if the player doesn't
-			interact with the link at all, the variable will still have the intended value.
-
-			If you want to include the current value of the bound variable in the link's series of strings, simply refer to it directly after
-			the bind: `(cycling-link: bind $hat, $hat, "Beret", "Poker visor", "Tricorn")` will place $hat's current value in the series,
-			and, as the first value, it will harmlessly overwrite $hat with itself (and thus leave it unchanged). Additionally, if you have
-			an array of strings that you'd like to reuse for the same cycling link in multiple passages, say as
-			`(set: $allHats to (a: "Helmet", "Beret", "Poker visor", "Tricorn"))`, and you'd like each cycling link to start on
-			whatever matching value is currently in $hat, simply first provide $hat as the first value,
-			then follow it with $allHats with $hat removed: `(cycling-link: bind $hat, $hat, ...($allHats - (a:$hat)))`. (Note that this doesn't
-			preserve the order of $allHats relative to $hat, however.)
-
-			If only one string was given to this macro, an error will be produced.
+			TBW
 
 			#input
 		*/
 		("cycling-link",
-			(...labels) => {
-				if (labels[0] === "") {
-					return TwineError.create("macrocall", "The first string in a (cycling-link:) can't be empty.");
-				}
-				if (labels.length <= (VarBind.isPrototypeOf(labels[0]) ? 2 : 1)) {
-					return TwineError.create("macrocall",
-						"I need two or more strings to cycle through, not just '"
-						+ labels[labels.length - 1]
-						+ "'."
-					);
-				}
+			() => {},
+			(cd, _, bind, ...labels) => {
+				// NEED evaluateTwineMarkup() here...
+				return assign(cd, { source: '<tw-link>' + labels[0] + '</tw-link>' });
 			},
-			(cd, _, ...labels) => {
-				/*
-					Often, all the params are labels. But if the first one is actually the optional VarBind,
-					we need to extract it from the labels array.
-				*/
-				let bind;
-				if (VarBind.isPrototypeOf(labels[0])) {
-					bind = labels.shift();
-				}
-				let index = 0;
+			[String]);
 
-				cd.data.clickEvent = (link) => {
-					/*
-						Rotate to the next label, cycling around if it's past the end.
-					*/
-					index = (index + 1) % labels.length;
-					let source = (labels[index] === "" ? "" : '<tw-link>' + labels[index] + '</tw-link>');
-					/*
-						If there's a bound variable, set it to the value of the next string.
-						(If it returns an error, let that replace the source.)
-					*/
-					if (bind) {
-						const result = bind.set(labels[index]);
-						if (TwineError.containsError(result)) {
-							/*
-								As this clickEvent occurs when the interface element has already been rendered,
-								we need to explicitly replace the link with the rendered error rather than return
-								the error (to nobody).
-							*/
-							link.replaceWith(result.render(labels[index]));
-							return;
-						}
-					}
-					/*
-						Display the next label, reusing the ChangeDescriptor (and thus the transitions, style changes, etc)
-						that the original run received.
-					*/
-					const cd2 = assign({}, cd, { source, transitionDeferred: false, });
-					/*
-						Since cd2's target SHOULD equal link, passing anything as the second argument won't do anything useful
-						(much like how the first argument is overwritten by cd2's source). So, null is given.
-					*/
-					cd.section.renderInto("", null, cd2);
-				};
-				/*
-					As above, the bound variable, if present, is set to the first label. Errors resulting
-					from this operation can be returned immediately.
-				*/
-				let source = '<tw-link>' + labels[0] + '</tw-link>';
-				if (bind) {
-					const result = bind.set(labels[index]);
-					if (TwineError.containsError(result)) {
-						return result;
-					}
-				}
-				return assign(cd, { source, append: "replace", transitionDeferred: true, });
-			},
-			[either(VarBind, String), rest(String)]);
-
-	/*
-		An onchange event for <select> elements must be registered for the sake of the (dropdown:) macro,
-		which is implemented similar to the link macros - the ChangeDescriptor's data.dropdownEvent indicates
-		what to do when the <select> is interacted with.
-	*/
-	$(() => $(storyElement).on(
-		/*
-			The jQuery event namespace is "dropdown-macro".
-		*/
-		"change.dropdown-macro",
-		"select",
-		function changeDropdownEvent() {
-			const dropdown = $(this),
-				/*
-					Dropdowns' events are, due to limitations in the ChangeDescriptor format,
-					attached to the <tw-hook> or <tw-expression> containing the element.
-				*/
-				event = dropdown.closest('tw-expression, tw-hook').data('dropdownEvent');
-
-			if (event) {
-				event(dropdown);
-			}
-		}
-	));
-	/*d:
-		(dropdown: Bind, ...String) -> Command
-
-		TBW
-
-		#input
-	*/
-	Macros.addCommand("dropdown",
-		() => {},
-		(cd, _, bind, ...labels) => {
-			let source = '<select>'
-				+ labels.map((label, i) =>
-					'<option' + (i === 0 ? ' selected' : '') + '>' + label + '</option>'
-				).join('\n')
-				+ '</select>';
-
-			cd.data.dropdownEvent = (dropdownMenu) => {
-				const value = dropdownMenu.val();
-				const result = bind.set(value);
-				if (TwineError.containsError(result)) {
-					/*
-						As this clickEvent occurs when the interface element has already been rendered,
-						we need to explicitly replace the link with the rendered error rather than return
-						the error (to nobody).
-					*/
-					dropdownMenu.replaceWith(result.render(value));
-					return;
-				}
-			};
-			const result = bind.set(labels[0]);
-			if (TwineError.containsError(result)) {
-				return result;
-			}
-			return assign(cd, { source, append: "replace", });
-		},
-		[VarBind, String, rest(String)])
-
+	Macros.addCommand
 		/*d:
 			(show: ...HookName) -> Command
 
@@ -497,7 +360,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			(show:) will reveal every hook with the given name. To only reveal a specific hook, you can use the
 			possessive syntax, as usual: `(show: ?shrub's 1st)`.
 
-			If you provide to (show:) a hook which is already visible, nothing will happen - no error will be produced.
+			If you provide to (show:) a hook which is already visible, an error will be produced.
 
 			See also:
 			(hidden:), (replace:)
@@ -506,23 +369,16 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		*/
 		("show",
 			() => {},
-			(cd, section, ...hooks) => {
+			(section, ...hooks) => {
 				hooks.forEach(hook => hook.forEach(section, elem => {
 					const hiddenSource = elem.data('hiddenSource');
 					if (hiddenSource === undefined) {
-						/*
-							Originally there was an error here, but it wasn't actually working, and I
-							decided that having (show:) silently fail when given already-shown
-							hooks' names provides it with slightly more flexibility in use, comparable to how most
-							hook-selecting macros like (click:) are permissive about the names given.
-						*/
-						return;
+						return TwineError.create("operation",
+							"I can't reveal a hook which is already visible.");
 					}
-					section.renderInto("", null,
-						assign({}, cd, { source: hiddenSource, target: elem })
-					);
+					section.renderInto(hiddenSource, elem);
 				}));
-				return cd;
+				return '';
 			},
 			[rest(HookSet)])
 
@@ -542,8 +398,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			Clunky though it looks, this macro serves a single important purpose: inside a (live:)
 			macro's hook, its appearance signals that the macro must stop running. In every other occasion,
 			this macro does nothing.
-
-			This command can't have changers attached - attempting to do so will produce an error.
 			
 			See also:
 			(live:)
@@ -553,7 +407,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		("stop",
 			() => {},
 			() => "",
-			[], false)
+			[])
 
 		/*d:
 			(save-game: String, [String]) -> Boolean
@@ -600,8 +454,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			it (because they're using private browsing, their browser's storage is full, or some other reason).
 			Since there's always a possibility of a save failing, you should use (if:) and (else:) with (save-game:)
 			to display an apology message in the event that it returns false (as seen above).
-
-			This command can't have changers attached - attempting to do so will produce an error.
 			
 			See also:
 			(load-game:), (saved-games:)
@@ -659,7 +511,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 					return false;
 				}
 			},
-			[String, optional(String)], false)
+			[String, optional(String)])
 
 		/*d:
 			(load-game: String) -> Command
@@ -682,8 +534,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			
 			This macro assumes that the save slot exists and contains a game, which you can check by seeing if
 			`(saved-games:) contains` the slot name before running (load-game:).
-
-			This command can't have changers attached - attempting to do so will produce an error.
 			
 			See also:
 			(save-game:), (saved-games:)
@@ -708,7 +558,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 				requestAnimationFrame(Engine.showPassage.bind(Engine, State.passage, false /* stretchtext value */));
 				return { earlyExit: 1 };
 			},
-			[String], false)
+			[String])
 
 		/*d:
 			(alert: String) -> Command
@@ -728,8 +578,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			When the dialog is on-screen, the entire game is essentially "paused" - no further computations are
 			performed until it is dismissed.
 
-			This command can't have changers attached - attempting to do so will produce an error.
-
 			See also:
 			(prompt:), (confirm:)
 
@@ -741,7 +589,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 				window.alert(text);
 				return "";
 			},
-			[String], false)
+			[String])
 
 		/*d:
 			(prompt: String, String) -> String
@@ -762,8 +610,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			When the dialog is on-screen, the entire game is essentially "paused" - no further computations are
 			performed until it is dismissed.
 
-			This command can't have changers attached - attempting to do so will produce an error.
-
 			See also:
 			(alert:), (confirm:)
 
@@ -772,7 +618,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		("prompt",
 			() => {},
 			(_, text, value) => window.prompt(text, value) || "",
-			[String, String], false)
+			[String, String])
 
 		/*d:
 			(confirm: String) -> Boolean
@@ -793,8 +639,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			When the dialog is on-screen, the entire game is essentially "paused" - no further computations are
 			performed until it is dismissed.
 
-			This command can't have changers attached - attempting to do so will produce an error.
-
 			See also:
 			(alert:), (prompt:)
 
@@ -803,7 +647,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 		("confirm",
 			() => {},
 			(_, text) => window.confirm(text),
-			[String], false)
+			[String])
 
 		/*d:
 			(open-url: String) -> Command
@@ -824,8 +668,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			hosted at "http://www.example.org/story.html", then `(open-url: "page2.html")` will actually open
 			the URL "http://www.example.org/page2.html".
 
-			This command can't have changers attached - attempting to do so will produce an error.
-
 			See also:
 			(goto-url:)
 
@@ -837,7 +679,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 				window.open(text, '');
 				return "";
 			},
-			[String], false)
+			[String])
 
 		/*d:
 			(reload:) -> Command
@@ -851,8 +693,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			Details:
 			If the first passage in the story contains this macro, the story will be caught in a "reload
 			loop", and won't be able to proceed. No error will be reported in this case.
-
-			This command can't have changers attached - attempting to do so will produce an error.
 
 			#url
 		*/
@@ -870,7 +710,7 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 				*/
 				return { earlyExit: 1 };
 			},
-			[], false)
+			[])
 
 		/*d:
 			(goto-url: String) -> Command
@@ -891,8 +731,6 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 			hosted at "http://www.example.org/story.html", then `(open-url: "page2.html")` will actually open
 			the URL "http://www.example.org/page2.html".
 
-			This command can't have changers attached - attempting to do so will produce an error.
-
 			See also:
 			(open-url:)
 
@@ -908,21 +746,24 @@ define(['jquery', 'requestAnimationFrame', 'macros', 'utils', 'utils/selectors',
 				*/
 				return { earlyExit: 1 };
 			},
-			[String], false);
+			[String])
 
-	/*d:
-		(page-url:) -> String
+		/*d:
+			(page-url:) -> String
 
-		This macro produces the full URL of the story's HTML page, as it is in the player's browser.
+			This macro produces the full URL of the story's HTML page, as it is in the player's browser.
 
-		Example usage:
-		`(if: (page-url:) contains "#cellar")` will be true if the URL contains the `#cellar` hash.
+			Example usage:
+			`(if: (page-url:) contains "#cellar")` will be true if the URL contains the `#cellar` hash.
 
-		Details:
-		This **may** be changed in a future version of Harlowe to return a datamap containing more
-		descriptive values about the URL, instead of a single string.
+			Details:
+			This **may** be changed in a future version of Harlowe to return a datamap containing more
+			descriptive values about the URL, instead of a single string.
 
-		#url
-	*/
-	Macros.add("page-url", () => window.location.href, []);
+			#url
+		*/
+		("page-url", 
+			() => {},
+			() => window.location.href,
+			[]);
 });

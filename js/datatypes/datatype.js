@@ -28,7 +28,7 @@ define([
 		| `array` | Arrays
 		| `datamap`, `dm` | Datamaps
 		| `dataset`, `ds` | Datasets
-		| `command` | Commands
+		| `command` | Commands and HookCommands
 		| `changer` | Changers
 		| `color`, `colour` | Colours
 

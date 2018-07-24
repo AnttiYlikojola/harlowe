@@ -1,13 +1,13 @@
 "use strict";
-define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'engine', 'datatypes/changercommand', 'datatypes/hookset', 'internaltypes/twineerror'],
-($, Macros, Utils, Selectors, State, Passages, Engine, ChangerCommand, HookSet, TwineError) => {
+define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'engine', 'datatypes/changercommand', 'internaltypes/twineerror'],
+($, Macros, Utils, Selectors, State, Passages, Engine, ChangerCommand, TwineError) => {
 	/*
 		This module defines the behaviour of links in Harlowe - both
 		the normal passage links, and the (link:) macro's links.
 		But, this does not include (click:) enchantments, which
 		are technically not links (but behave identically).
 	*/
-	const {optional,rest} = Macros.TypeSignature;
+	const {optional} = Macros.TypeSignature;
 	const emptyLinkTextMessages = ["Links can't have empty strings for their displayed text.",
 		"In the link syntax, a link's displayed text is inside the [[ and ]], and on the non-pointy side of the -> or <- arrow if it's there."];
 	//const emptyPassageNameMessages = ["Passage links must have a passage name.",
@@ -44,14 +44,6 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 				event = link.closest('tw-expression, tw-hook').data('clickEvent');
 
 			if (event) {
-				/*
-					If a link's body contains a <tw-error>, then don't
-					allow it to be clicked anymore, so that (for instance), the error message
-					can be expanded to see the line of additional advice.
-				*/
-				if (link.find('tw-error').length > 0) {
-					return;
-				}
 				event(link);
 				return;
 			}
@@ -60,32 +52,30 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 			*/
 			const next = expression.data('linkPassageName');
 			/*
-				The correct t8nDepart, t8nArrive and t8nTime belongs to the deepest <tw-enchantment>.
+				The correct t8nDepart and t8nArrive belongs to the deepest <tw-enchantment>.
 				Iterate through each <tw-enchantment> and update these variables.
 				(A .each() loop is easier when working with a jQuery compared to a .reduce().)
 			*/
 			let transitionOut = expression.data('t8nDepart');
 			let transitionIn = expression.data('t8nArrive');
-			let transitionTime = expression.data('t8nTime');
 			/*
 				$().find() SHOULD return the tw-enchantments in ascending depth order.
 			*/
 			expression.find('tw-enchantment').each((_,e) => {
 				transitionOut = $(e).data('t8nDepart') || transitionOut;
 				transitionIn = $(e).data('t8nArrive') || transitionIn;
-				transitionTime = $(e).data('t8nTime') !== undefined ? $(e).data('t8nTime') : transitionTime;
 			});
 
 			if (next) {
 				// TODO: stretchtext
-				Engine.goToPassage(next, { transitionOut, transitionIn, transitionTime });
+				Engine.goToPassage(next, { transitionOut, transitionIn });
 				return;
 			}
 			/*
 				Or, a (link-undo:) link.
 			*/
 			if (link.is('[undo]')) {
-				Engine.goBack({ transitionOut, transitionIn, transitionTime });
+				Engine.goBack({ transitionOut, transitionIn });
 				return;
 			}
 		}
@@ -200,7 +190,6 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 					append method) - the others merely append.
 				*/
 				desc.append = arr[0] === "link" ? "replace" : "append";
-				desc.transitionDeferred = true;
 				desc.data.clickEvent = (link) => {
 					/*
 						Only (link-reveal:) turns the link into plain text:
@@ -209,9 +198,8 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 					if (arr[0] === "link-reveal") {
 						link.contents().unwrap();
 					}
-					desc.source = desc.innerSource + "";
-					desc.transitionDeferred = false;
-					desc.section.renderInto("", null, desc);
+					desc.source = desc.innerSource;
+					desc.section.renderInto(desc.innerSource + "", null, desc);
 				};
 			},
 			[String]
@@ -223,9 +211,9 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 		passage name ((goto:)'s argument) is evaluated alongside (link:)'s argument.
 		It is also what the standard link syntax desugars to.
 	*/
-	Macros.addCommand
+	Macros.addHookCommand
 		/*d:
-			(link-goto: String, [String]) -> Command
+			(link-goto: String, [String]) -> HookCommand
 			
 			Takes a string of link text, and an optional destination passage name, and makes a command to create
 			a link that takes the player to another passage. The link functions identically to a standard link.
@@ -323,21 +311,13 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 					Instead, the passage name is stored on the <tw-expression>, to be retrieved by clickEvent() above.
 				*/
 				cd.data.linkPassageName = passageName;
-				return assign(cd, {
-					source,
-					/*
-						Since this link doesn't reveal any hooks, it doesn't necessarily make sense that it should
-						have transitionDeferred... but for consistency with the other links, it does.
-						(Maybe it should error outright if (t8n:) is attached to it?)
-					*/
-					transitionDeferred: true,
-				});
+				return assign(cd, { source });
 			},
 			[String, optional(String)]
 		)
 
 		/*d:
-			(link-undo: String) -> Command
+			(link-undo: String) -> HookCommand
 
 			Takes a string of link text, and produces a link that, when clicked, undoes the current turn and
 			sends the player back to the previously visited passage. The link appears identical to a typical
@@ -357,7 +337,7 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 
 			Details:
 			As with (undo:), if this command is used on the play session's first turn, an error will be produced (as there
-			is yet nothing to undo at that time). You can check which turn it is by examining the `length` of the (history:)
+			is yet nothing to undo at that time.) You can check which turn it is by examining the `length` of the (history:)
 			array.
 
 			See also:
@@ -383,93 +363,15 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 					This currently reveals its purpose in the player-readable DOM by including an 'undo' attribute,
 					which is used by the "click.passage-link" event handler.
 				*/
-				return assign(cd, {
-					source: '<tw-link tabindex=0 undo>' + text + '</tw-link>',
-					transitionDeferred: true,
-				});
+				return assign(cd, { source: '<tw-link tabindex=0 undo>' + text + '</tw-link>' });
 			},
 			[String]
-		)
-
-		/*d:
-			(link-show: String, ...HookName) -> Command
-
-			Creates a link that, when clicked, shows the given hidden hooks, running the code within.
-
-			Example usage:
-			`But those little quirks paled before (link-show: "her darker eccentricities.", ?twist)`
-
-			Rationale:
-			As discussed in the documentation for (show:), that macro is intended as a complement to (click-replace:) (or perhaps
-			(click-append:)). While both let you insert text at a location when a link is clicked, they differ in whether they let the
-			author write the initial text or the replacement text at the location when coding the passage.
-
-			Typical (click-append:) usage resembles the following, where the inserted text provides supplementary content to the passage's
-			prose, and is written separately from it:
-
-			```
-			Ah. You remember her eldest well - [a frail, anxious child]<more|. Unlikely to raise too much of a fuss.
-
-			(click-append: ?more)[, constantly frowning, mumbling every word they utter, flinching at the slightest noise]
-			```
-
-			Conversely, typical (show:) usage resembles the following, where the inserted text is a continuation of the passage's prose,
-			and is written together with it:
-
-			```
-			"Look, it's important to comment even the simplest code...|more)[ You might remember what it does now, but not at 4:50 PM on Friday
-			afternoon, when you're about to push to production and a runtime error shows up in it.]"
-
-			You (link-reveal:"struggle to listen.")[(show: ?more)]
-			```
-
-			The (link-show:) macro provides a convenient shorthand for the latter example, letting you write the final line as
-			`You (link-show: "struggle to listen.", ?more)`.
-
-			Details:
-			As with most link macros, providing this with an empty link text string will result in an error.
-
-			As with (show:) and (click:), providing this with a hook which is already visible, or which doesn't even exist,
-			will NOT produce an error, but simply do nothing.
-
-			See also:
-			(show:), (link-reveal:), (click-append:)
-
-			#links 6
-		*/
-		("link-show",
-			(text) => {
-				if (!text) {
-					return TwineError.create("macrocall", emptyLinkTextMessages[0]);
-				}
-			},
-			(cd, section, text, ...hooks) => {
-				cd.data.clickEvent = (link) => {
-					link.contents().unwrap();
-					hooks.forEach(hook => hook.forEach(section, elem => {
-						const hiddenSource = elem.data('hiddenSource');
-						if (hiddenSource === undefined) {
-							return;
-						}
-						section.renderInto("", null,
-							assign({}, cd, { source: hiddenSource, target: elem, transitionDeferred: false })
-						);
-					}));
-				};
-				return assign(cd, {
-					source: '<tw-link tabindex=0>' + text + '</tw-link>',
-					transitionDeferred: true,
-				});
-			},
-			[String,rest(HookSet)]
 		);
-
 
 	/*d:
 		(link-reveal-goto: String, [String]) -> Changer
 		
-		This is a convenient combination of the (link-reveal:) and (go-to:) macros, designed to let you run commands like (set:)
-		just before going to another passage. The first string is the link text, and the second is the passage name.
+		TBW
 		
 		Example usage:
 		 * `(link-reveal-goto: "Study English", "Afternoon 1")[(set:$eng to it + 1)]` will create a link reading "Study English"
@@ -477,14 +379,13 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 		 * `(link-reveal-goto: "Fight the King of England", "Death")[(alert:"You asked for it!")]` will create a link reading
 		 "Fight the King of England" which, when clicked, displays an alert using (alert:), and then goes to the passage "Death".
 		
+		Rationale:
+		
+		TBW
+		
 		Details:
 
-		Note that there is already an idiom for checking if a passage was visited earlier in the game: `(history:) contains "Passage name"`
-		checks if the passage named "Passage name" was visited. So, you don't necessarily need to use this macro to record that the player
-		has visited the destination passage.
-
-		Note also that there's no way to "cancel" traveling to the new passage once the link is clicked, unless you include (go-to:),
-		(undo:) or another such macro is inside the hook.
+		TBW
 		
 		See also:
 		(link-reveal:), (link:), (link-goto:), (click:)
@@ -542,7 +443,6 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 			const visited = (State.passageNameVisited(passageName));
 			desc.source = '<tw-link tabindex=0 ' + (visited > 0 ? 'class="visited" ' : '') + '>' + text + '</tw-link>';
 			desc.append = "append";
-			desc.transitionDeferred = true;
 			desc.data.clickEvent = (link) => {
 				desc.source = desc.innerSource;
 				/*
@@ -551,20 +451,11 @@ define(['jquery', 'macros', 'utils', 'utils/selectors', 'state', 'passages', 'en
 					was displayed by the innerSource.
 				*/
 				link.contents().unwrap();
-				/*
-					This technically isn't needed if the goToPassage() call below fires (that is, in normal circumstances),
-					but its absence is observable if an error is displayed, so it might as well be included.
-				*/
-				desc.transitionDeferred = false;
 				desc.section.renderInto(desc.innerSource + "", null, desc);
 				/*
-					Having revealed, we now go-to, UNLESS an early exit was invoked, which signifies a different (go-to:) was
-					activated.
-					Much as in doExpressions() in section.renderInto(), we can check for an early exit via the DOM.
+					Having revealed, we now go-to.
 				*/
-				if (!desc.target.find('[earlyexit]').length) {
-					Engine.goToPassage(passageName, { transitionOut: desc.data.t8nDepart, transitionIn: desc.data.t8nArrive });
-				}
+				Engine.goToPassage(passageName, { transitionOut: desc.data.t8nDepart, transitionIn: desc.data.t8nArrive });
 			};
 		},
 		[String, optional(String)]

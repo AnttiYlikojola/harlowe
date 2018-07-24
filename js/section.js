@@ -224,7 +224,7 @@ define([
 				*/
 			}
 			/*
-				If instead of a +, it's another kind of expression, we attempt to determine if it has TwineScript_Attach().
+				If instead of a +, it's another kind of expression, we attempt to determine if it's a HookCommand.
 				If not, then the changer's attempted attachment fails and an error results, and it doesn't matter if the expression
 				is dropped (by us executing its js early) as well.
 			*/
@@ -251,17 +251,10 @@ define([
 				/*
 					When the attachment can't happen, produce an error mentioning that only certain structures allow changers to attach.
 				*/
-				else if (ChangerCommand.isPrototypeOf(nextValue)) {
-					expr.replaceWith(TwineError.create("operation",
-						"Changers like (" + result.macroName + ":) need to be combined using + in the passage's text.",
-						"Place the + between the changer macro calls. The + is absent only between a changer and its attached hook or command."
-					).render(expr.attr('title')));
-					return;
-				}
 				else {
 					expr.replaceWith(TwineError.create("operation",
-						objectName(nextValue) + " can't have changers like (" + result.macroName + ":) attached.",
-						"Changers placed just before hooks, links and commands will attempt to attach, but in this case it didn't work."
+						"The (" + result.macroName + ":) changer can't attach to " + objectName(nextValue) + ".",
+						"Changers can only attach to hooks, or macros that produce hooks."
 					).render(expr.attr('title')));
 					return;
 				}
@@ -325,17 +318,9 @@ define([
 				from running the command (such as running (undo:) on the first turn).
 			*/
 			if (TwineError.containsError(result)) {
-				expr.replaceWith(result.render(expr.attr('title')));
+				expr.replaceWith(result.render(expr.attr('title'), expr));
 			}
 			if (ChangeDescriptor.isPrototypeOf(result)) {
-				/*
-					We need to update the ChangeDescriptor to have these fields, so
-					that certain interaction macros that want to reuse it (such as (cycling-link:))
-					can pass it to renderInto().
-				*/
-				result.section = this;
-				result.target = nextElem;
-				
 				this.renderInto('', nextElem, result);
 				/*
 					If TwineScript_Run returns a ChangeDescriptor with earlyExit,
@@ -345,6 +330,14 @@ define([
 				if (result.earlyExit) {
 					return "earlyexit";
 				}
+			}
+			/*
+				This should be refactored out soon (May 2018)...
+				The only commands whose Run() would produce a string are
+				links, and all those should be HookCommands.
+			*/
+			if (typeof result === "string") {
+				this.renderInto(result, nextElem);
 			}
 		}
 		/*
@@ -383,7 +376,7 @@ define([
 				if (result instanceof Error) {
 					result = TwineError.fromError(result);
 				}
-				expr.replaceWith(result.render(expr.attr('title')));
+				expr.replaceWith(result.render(expr.attr('title'), expr));
 			}
 			else {
 				/*
@@ -613,7 +606,7 @@ define([
 	*/
 	function runLiveHook(expr, target, delay = 20, event = undefined) {
 		if (event) {
-			Utils.assertMustHave(event, ["when"]);
+			Utils.assertMustHave(event, "when");
 		}
 		/*
 			Obtain the code of the hook that the (live:) or (event:) changer suppressed.
@@ -635,17 +628,13 @@ define([
 			/*
 				If this is an (event:) command, check the event (which should be a "when" lambda)
 				and if it's not happened yet, wait for the next timeout.
-
-				Note: Lambda.filter() returns the passed-in array with values filtered out based on
-				whether the lambda was false. So, passing in 'true' will return [true] if
-				the lambda was true and [] (an empty array) if not.
 			*/
-			const eventFired = (event && event.filter(this, [true]));
+			const eventFired = (event && event.filter(this, [undefined]));
 			if (TwineError.containsError(eventFired)) {
 				eventFired.render(expr.attr('title')).replaceAll(expr);
 				return;
 			}
-			if (event && !eventFired[0]) {
+			if (event && !eventFired) {
 				setTimeout(recursive, delay);
 				return;
 			}
@@ -911,7 +900,7 @@ define([
 									dom.attr('earlyexit', true);
 									return false;
 								}
-								return;
+								return result;
 							}
 						}
 					}
